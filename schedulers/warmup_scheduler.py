@@ -50,7 +50,6 @@ class WarmUpScheduler(CombineLRSchedulers):
         else:
             lr_multiply = 0
             num_steps = warmup_steps
-        print(num_steps)
         warmup = LambdaLR(
             optimizer,
             # Substract 1 / num_steps as we start from step = 1
