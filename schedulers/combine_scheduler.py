@@ -70,11 +70,13 @@ class CombineLRSchedulers:
         self._last_step += 1
         if not self._reached_end:
             self._update_if_needed()
-        self.lr_schedulers[self._lr_scheduler_idx].step(step)
+        self.lr_schedulers[self._lr_scheduler_idx].step(step, **kwargs)
 
     def _update_if_needed(self) -> None:
         # As python slicing does not include value at index self._current_num_steps
         if self._last_step > sum(self._lr_schedulers_steps[:self._current_num_steps + 1]):
+            # Sum here is pretty fast because usually you
+            # do not combine more than 3 different LRSchedulers.
             previous_base_lrs = self.lr_schedulers[self._lr_scheduler_idx].base_lrs
             self._lr_scheduler_idx += 1
             self._current_num_steps += 1

@@ -21,44 +21,48 @@ class WarmUpScheduler(CombineLRSchedulers):
         Number of steps for Gradual WarmUp stage.
     after_warmup_scheduler : `_LRScheduler`, required
         Scheduler after Gradual WarmUp.
+    starts_with : `int`, optional (default = `None`)
+        Initial learning rate to start WarmUp Stage.
+        If None then starting point is considered to be 0.
     add_constant_steps : `int`, optional (default = `None`)
         Number of steps for stage with constant learning rate.
         If None constant stage is not considered.
-    warmup_denominator : `int`, optional (default = `None`)
-        Denominator for warmup like in `Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour`
-        where learning rate was 0.1 * kn / 256. 256 is a denominator.
-        With this for Gradual WarmUp stage at the end we could achieve
-        learning rate higher than it was in `optimizer` at the last step.
-        If None use `warmup_steps` as a denominator.
     """
     def __init__(
         self,
         optimizer: Optimizer,
         warmup_steps: int,
         after_warmup_scheduler: _LRScheduler,
-        add_constant_steps: int = None,
-        warmup_denominator: int = None,
+        starts_with: int = None,
+        add_constant_steps: int = None
     ) -> None:
-        if add_constant_steps is not None and add_constant_steps <= 0:
-            raise ValueError('add_constant_steps should be greater than 1.')
+        # 0: Validate passed values
+        for val in [starts_with, add_constant_steps]:
+            self._validate(val)
+        # 1: Configure WarmUp Stage
+        warmup_steps = max(1.0, warmup_steps)
+        if starts_with:
+            # Use initial_lr as each instance of _LRScheduler makes its first (0 step) during init
+            # and as we expect after_warmup_scheduler to be an instance of _LRScheduler then
+            # we will definitely have initial_lr for optimizer.param_groups
+            lr_multiply = starts_with / optimizer.param_groups[0].get('initial_lr', 1)
+            num_steps = lr_multiply * warmup_steps + warmup_steps - 1
+        else:
+            lr_multiply = 0
+            num_steps = warmup_steps
+        print(num_steps)
+        warmup = LambdaLR(
+            optimizer,
+            # Substract 1 / num_steps as we start from step = 1
+            lr_lambda=lambda step: min(1.0, (step / num_steps) + max(0, lr_multiply - (1 / num_steps)))
+        )
+        # 2: Set Constant LR Stage after WarmUp if needed
         if add_constant_steps:
-            lr_schedulers = [
-                LambdaLR(
-                    optimizer,
-                    lr_lambda=lambda step: step / max(1.0, warmup_denominator or warmup_steps),
-                ),
-                LambdaLR(optimizer, lr_lambda=lambda step: 1.0),
-                after_warmup_scheduler
-            ]
+            const_lr = LambdaLR(optimizer, lr_lambda=lambda step: 1.0)
+            lr_schedulers = [warmup, const_lr, after_warmup_scheduler]
             lr_schedulers_steps = [warmup_steps, add_constant_steps]
         else:
-            lr_schedulers = [
-                LambdaLR(
-                    optimizer,
-                    lr_lambda=lambda step: step / max(1.0, warmup_denominator or warmup_steps),
-                ),
-                after_warmup_scheduler
-            ]
+            lr_schedulers = [warmup, after_warmup_scheduler]
             lr_schedulers_steps = [warmup_steps]
         super().__init__(
             lr_schedulers=lr_schedulers,
@@ -71,7 +75,7 @@ class WarmUpScheduler(CombineLRSchedulers):
         optimizer: Optimizer,
         warmup_steps: int,
         num_training_steps: int,
-        warmup_denominator: int = None
+        starts_with: int = None
     ) -> Type['WarmUpScheduler']:
         """
         Instantiate WarmUpScheduler with linear decreasing learning rate after it.
@@ -84,12 +88,9 @@ class WarmUpScheduler(CombineLRSchedulers):
             Number of steps for Gradual WarmUp stage.
         num_training_steps : `int`, required
             Number of steps in training phase.
-        warmup_denominator : `int`, optional (default = `None`)
-            Denominator for warmup like in `Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour`
-            where learning rate was 0.1 * kn / 256. 256 is a denominator.
-            With this for Gradual WarmUp stage at the end we could achieve
-            learning rate higher than it was in `optimizer` at the last step.
-            If None use `warmup_steps` as a denominator.
+        starts_with : `int`, optional (default = `None`)
+            Initial learning rate to start WarmUp Stage.
+            If None then starting point is considered to be 0.
         """
         return cls(
             optimizer=optimizer,
@@ -101,7 +102,7 @@ class WarmUpScheduler(CombineLRSchedulers):
                     (num_training_steps - step) / max(1.0, num_training_steps - warmup_steps)
                 )
             ),
-            warmup_denominator=warmup_denominator
+            starts_with=starts_with
         )
 
     @classmethod
@@ -110,7 +111,7 @@ class WarmUpScheduler(CombineLRSchedulers):
         optimizer: Optimizer,
         warmup_steps: int,
         num_training_steps: int,
-        warmup_denominator: int = None,
+        starts_with: int = None
     ) -> Type['WarmUpScheduler']:
         """
         Instantiate WarmUpScheduler with cosine annealing learning rate after it.
@@ -123,12 +124,9 @@ class WarmUpScheduler(CombineLRSchedulers):
             Number of steps for Gradual WarmUp stage.
         num_training_steps : `int`, required
             Number of steps in training phase.
-        warmup_denominator : `int`, optional (default = `None`)
-            Denominator for warmup like in `Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour`
-            where learning rate was 0.1 * kn / 256. 256 is a denominator.
-            With this for Gradual WarmUp stage at the end we could achieve
-            learning rate higher than it was in `optimizer` at the last step.
-            If None use `warmup_steps` as a denominator.
+        starts_with : `int`, optional (default = `None`)
+            Initial learning rate to start WarmUp Stage.
+            If None then starting point is considered to be 0.
         """
         return cls(
             optimizer=optimizer,
@@ -137,7 +135,7 @@ class WarmUpScheduler(CombineLRSchedulers):
                 optimizer,
                 T_max=num_training_steps
             ),
-            warmup_denominator=warmup_denominator
+            starts_with=starts_with
         )
 
     @classmethod
@@ -145,7 +143,7 @@ class WarmUpScheduler(CombineLRSchedulers):
         cls: Type['WarmUpScheduler'],
         optimizer: Optimizer,
         warmup_steps: int,
-        warmup_denominator: int = None
+        starts_with: int = None
     ) -> Type['WarmUpScheduler']:
         """
         Instantiate WarmUpScheduler with constant learning rate after it.
@@ -156,16 +154,22 @@ class WarmUpScheduler(CombineLRSchedulers):
             Wrapped optimizer.
         warmup_steps : `int`, required
             Number of steps for Gradual WarmUp stage.
-        warmup_denominator : `int`, optional (default = `None`)
-            Denominator for warmup like in `Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour`
-            where learning rate was `0.1 * kn / 256`. 256 is a denominator.
-            With this for Gradual WarmUp stage at the end we could achieve
-            learning rate higher than it was in `optimizer` at the last step.
-            If None use `warmup_steps` as a denominator.
+        starts_with : `int`, optional (default = `None`)
+            Initial learning rate to start WarmUp Stage.
+            If None then starting point is considered to be 0.
         """
         return cls(
             optimizer=optimizer,
             warmup_steps=warmup_steps,
             after_warmup_scheduler=LambdaLR(optimizer, lr_lambda=lambda step: 1.0),
-            warmup_denominator=warmup_denominator
+            starts_with=starts_with
         )
+
+    @staticmethod
+    def _validate(x: int) -> None:
+        """Static function to validate `int` values passed to `init`."""
+        if x is not None and x <= 0:
+            raise ValueError(
+                'starts_with, add_constant_steps'
+                'should be greater than 1.'
+            )
