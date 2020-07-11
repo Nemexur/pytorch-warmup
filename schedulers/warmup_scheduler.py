@@ -23,7 +23,8 @@ class WarmUpScheduler(CombineLRSchedulers):
         Scheduler after Gradual WarmUp.
     starts_with : `int`, optional (default = `None`)
         Initial learning rate to start WarmUp Stage.
-        If None then starting point is considered to be 0.
+        If None then starting point is considered to be
+        `optimizer.lr / warmup_steps`.
     add_constant_steps : `int`, optional (default = `None`)
         Number of steps for stage with constant learning rate.
         If None constant stage is not considered.
@@ -36,7 +37,7 @@ class WarmUpScheduler(CombineLRSchedulers):
         starts_with: int = None,
         add_constant_steps: int = None
     ) -> None:
-        # 0: Validate passed values
+        # 0: Validate passed optional values
         for val in [starts_with, add_constant_steps]:
             self._validate(val)
         # 1: Configure WarmUp Stage
@@ -45,15 +46,15 @@ class WarmUpScheduler(CombineLRSchedulers):
             # Use initial_lr as each instance of _LRScheduler makes its first (0 step) during init
             # and as we expect after_warmup_scheduler to be an instance of _LRScheduler then
             # we will definitely have initial_lr for optimizer.param_groups
-            lr_multiply = starts_with / optimizer.param_groups[0].get('initial_lr', 1)
-            num_steps = lr_multiply * warmup_steps + warmup_steps - 1
+            lr_start = starts_with / optimizer.param_groups[0].get('initial_lr', 1)
+            num_steps = lr_start * warmup_steps + warmup_steps
         else:
-            lr_multiply = 0
+            lr_start = 0
             num_steps = warmup_steps
         warmup = LambdaLR(
             optimizer,
             # Substract 1 / num_steps as we start from step = 1
-            lr_lambda=lambda step: min(1.0, (step / num_steps) + max(0, lr_multiply - (1 / num_steps)))
+            lr_lambda=lambda step: min(1.0, (step / num_steps) + max(0, lr_start - (1 / num_steps)))
         )
         # 2: Set Constant LR Stage after WarmUp if needed
         if add_constant_steps:
@@ -89,7 +90,8 @@ class WarmUpScheduler(CombineLRSchedulers):
             Number of steps in training phase.
         starts_with : `int`, optional (default = `None`)
             Initial learning rate to start WarmUp Stage.
-            If None then starting point is considered to be 0.
+            If None then starting point is considered to be
+            `optimizer.lr / warmup_steps`.
         """
         return cls(
             optimizer=optimizer,
@@ -125,7 +127,8 @@ class WarmUpScheduler(CombineLRSchedulers):
             Number of steps in training phase.
         starts_with : `int`, optional (default = `None`)
             Initial learning rate to start WarmUp Stage.
-            If None then starting point is considered to be 0.
+            If None then starting point is considered to be
+            `optimizer.lr / warmup_steps`.
         """
         return cls(
             optimizer=optimizer,
@@ -155,7 +158,8 @@ class WarmUpScheduler(CombineLRSchedulers):
             Number of steps for Gradual WarmUp stage.
         starts_with : `int`, optional (default = `None`)
             Initial learning rate to start WarmUp Stage.
-            If None then starting point is considered to be 0.
+            If None then starting point is considered to be
+            `optimizer.lr / warmup_steps`.
         """
         return cls(
             optimizer=optimizer,
@@ -169,6 +173,6 @@ class WarmUpScheduler(CombineLRSchedulers):
         """Static function to validate `int` values passed to `init`."""
         if x is not None and x <= 0:
             raise ValueError(
-                'starts_with, add_constant_steps'
-                'should be greater than 1.'
+                'starts_with or add_constant_steps'
+                'should be greater than 0.'
             )
