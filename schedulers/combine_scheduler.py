@@ -1,6 +1,5 @@
-from typing import (
-    List, Dict, Any
-)
+from typing import List, Dict, Any
+import numpy as np
 from torch.optim.lr_scheduler import _LRScheduler
 
 
@@ -32,7 +31,7 @@ class CombineLRSchedulers:
                 'than number of lr_schedulers as we are working with pairs.'
             )
         self.lr_schedulers = lr_schedulers
-        self._lr_schedulers_steps = lr_schedulers_steps
+        self._lr_schedulers_steps = np.cumsum(lr_schedulers_steps)
         self._last_step = 0
         self._reached_end = False
         self._lr_scheduler_idx = 0
@@ -73,10 +72,7 @@ class CombineLRSchedulers:
         self.lr_schedulers[self._lr_scheduler_idx].step(step, **kwargs)
 
     def _update_if_needed(self) -> None:
-        # As python slicing does not include value at index self._current_num_steps
-        if self._last_step > sum(self._lr_schedulers_steps[:self._current_num_steps + 1]):
-            # Sum here is pretty fast because usually you
-            # do not combine more than 3 different LRSchedulers.
+        if self._last_step > self._lr_schedulers_steps[self._current_num_steps]:
             previous_base_lrs = self.lr_schedulers[self._lr_scheduler_idx].base_lrs
             self._lr_scheduler_idx += 1
             self._current_num_steps += 1

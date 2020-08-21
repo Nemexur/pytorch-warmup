@@ -1,8 +1,7 @@
 from typing import Type
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import (
-    _LRScheduler, LambdaLR,
-    CosineAnnealingLR
+    _LRScheduler, LambdaLR, CosineAnnealingLR
 )
 from .combine_scheduler import CombineLRSchedulers
 
