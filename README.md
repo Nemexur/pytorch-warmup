@@ -12,18 +12,12 @@ from torch_warmup import WarmUpScheduler
 
 model = ...
 optim = SGD(model.parameters(), lr=0.01)
-scheduler_warmup = WarmUpScheduler(
-    optim,
-    warmup_steps=2500,
-    add_constant_steps=100,
-    starts_with=0.1,
-    after_warmup_scheduler=scheduler_linear
-)
+scheduler_warmup = WarmUpScheduler(...)
 # Typical train loop with PyTorch Scheduler
 ...
 ```
 
-## Images
+## Examples
 
 Some images of different learning rate schedulers.
 
